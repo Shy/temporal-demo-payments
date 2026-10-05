@@ -79,6 +79,27 @@ bundled Server and Web UI. Any JDK 21 will do: the build discovers one rather th
 particular install location, and the CLI is taken from `PATH`. `make preflight` prints what it
 resolved, and `make start` refuses to run on the wrong CLI or without a JDK 21.
 
+**Local AI investigation:** Install Ollama and run `ollama pull qwen3.5:9b` once. `make preflight`
+checks for the model, and `make start` starts Ollama if it is not already running. The model is
+never downloaded automatically. For manual payouts needing approval, the decision step chooses
+zero, one, or two read-only tools: customer profile and recent payouts. An empty review-facts
+list deterministically skips investigation; with facts supplied, Qwen chooses the tools. Each
+lookup is a separate Temporal Activity. Qwen then writes an evidence-grounded brief with a routine or
+escalated human-review recommendation. The **Synthetic review facts** field starts with
+“typical customer behavior” for Successful payout, and “new recipient” plus “unusual amount
+for this customer” for the other scenarios; add one fact per line. Both the facts
+and customer records are synthetic. Lookup results, model choice, and recommendation appear
+beside the approval controls and in the workflow Query. The agent cannot approve, reject, or
+move money. If a model call or lookup fails, approval proceeds with an “AI brief unavailable”
+message; each model call is bounded to 15 seconds, with no retries. The approval timer starts
+after investigation and runs for 60 seconds. Existing payouts and load-simulator payouts skip
+the AI steps and keep their original 30-second approval timer. The model name is configurable
+with `DEMO_AI_MODEL`; there is no model selector in the UI yet. The **Synthetic customer record**
+control switches between a customer with no recorded flags and one with an unresolved account
+alert, so the same review facts can be tried against different lookup evidence.
+Clear the review facts to see the no-lookup path. The reason appears in the brief, and a
+**MarkInvestigationSkipped** Activity makes that decision explicit on the Temporal timeline.
+
 ---
 
 ## What it shows
@@ -94,8 +115,10 @@ Five scenarios on the **Demo** tab, each with its own controls and explanatory n
    compensation, in reverse registration order. The compensation activities are scheduled with
    no attempt cap and a flat 5s backoff, bounded only by a one-hour schedule-to-close: giving
    up early would strand the money.
-4. **Human approval + timeout** — the workflow blocks durably on a signal. Kill the whole
-   application and it is still waiting when the process returns.
+4. **Human approval + timeout** — local Qwen chooses synthetic customer lookups and drafts a
+   recommendation from the supplied facts and lookup results,
+   then the workflow blocks durably on a signal. Kill the whole application and it is still
+   waiting when the process returns.
 5. **Unknown bank status** — the bank accepted an instruction and never confirmed. Rather than
    escalate, the workflow **polls the bank** until it gets a real answer and continues on its
    own. The retry policy on the poll activity *is* the polling loop. Only when polling is
@@ -141,7 +164,7 @@ flowchart TD
     V["validatePayout"]:::act
     R["reserveFunds"]:::act
     F["validateFxQuote"]:::act
-    APP["conditional AWAITING_APPROVAL, then APPROVED<br/>when the USD equivalent is $500 or more"]:::opt
+    APP["conditional Qwen brief + AWAITING_APPROVAL, then APPROVED<br/>when the USD equivalent is $500 or more"]:::opt
     S["submitToRail"]:::act
     B["the bank confirms<br/>inline via settleWithBank under $100,<br/>otherwise the bankStatusUpdate callback"]:::wait
     M["markPayout COMPLETED"]:::act
@@ -178,7 +201,7 @@ flowchart TD
     A_RESERVE["reserveFunds"]:::act
     A_FX["validateFxQuote"]:::act
     TIER{"approval<br/>needed?"}:::dec
-    AWAIT_APP["AWAITING_APPROVAL<br/>approve signal vs 30s timer"]:::wait
+    AWAIT_APP["AWAITING_APPROVAL<br/>approve signal vs 60s timer for manual AI runs<br/>30s otherwise"]:::wait
     A_SUBMIT["submitToRail"]:::act
     AMT{"under<br/>$100?"}:::dec
     A_SETTLE["settleWithBank"]:::act
@@ -203,7 +226,7 @@ flowchart TD
     A_RESERVE -->|"FUNDS_RESERVED"| A_FX
     A_FX -->|"FX_QUOTE_VALIDATED"| TIER
     TIER -->|"no · SUBMITTING_TO_BANK"| A_SUBMIT
-    TIER -->|"L1 or SENIOR"| AWAIT_APP
+    TIER -->|"L1 or SENIOR · manual runs draft AI brief first"| AWAIT_APP
     AWAIT_APP -->|"APPROVED · SUBMITTING_TO_BANK"| A_SUBMIT
     A_SUBMIT -->|"SUBMITTED_TO_BANK"| AMT
     AMT -->|"yes · SETTLING_WITH_BANK"| A_SETTLE
@@ -220,7 +243,7 @@ flowchart TD
     A_FX -.-> COMPENSATING
     A_SUBMIT -.-> COMPENSATING
     A_SETTLE -.-> COMPENSATING
-    AWAIT_APP -.->|"declined, or 30s timer first"| COMPENSATING
+    AWAIT_APP -.->|"declined, or approval timer first"| COMPENSATING
     REPORTED -.->|"REJECTED, or UNKNOWN after polling"| COMPENSATING
     COMPENSATING -.- NOTE
     COMPENSATING --> R1
@@ -383,7 +406,7 @@ implementation would have to satisfy, and `scripts/contract-test.sh` is that con
 executable. It drives the HTTP API only, so any future backend can be checked against it.
 
 Alongside it, `make build` runs two JUnit 5 suites that need nothing running: a unit suite on
-`TestWorkflowEnvironment` with time skipping (which is how the 30s approval and 45s bank
+`TestWorkflowEnvironment` with time skipping (which is how the 30s/60s approval and 45s bank
 deadlines get tested at all), and an integration suite that boots the whole Spring context
 against the SDK's in-memory test server. Those are Java-SDK-specific and deliberately not part
 of the cross-SDK contract.

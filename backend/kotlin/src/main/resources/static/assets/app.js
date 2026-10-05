@@ -140,6 +140,10 @@ const Notes = ({ items }) => html`
 // ---------------------------------------------------------------------------
 // Scenarios
 // ---------------------------------------------------------------------------
+const DEFAULT_REVIEW_FACTS = {
+  successful: 'typical customer behavior',
+  other: 'new recipient\nunusual amount for this customer',
+}
 const SCENARIOS = [
   {
     id: 'successful', name: 'Successful payout',
@@ -173,12 +177,12 @@ const SCENARIOS = [
   },
   {
     id: 'approval', name: 'Human approval + timeout',
-    blurb: 'Amount above the threshold blocks on a signal. Approve it, reject it, or let the timer fire.',
+    blurb: 'Qwen chooses synthetic customer lookups, writes a recommendation, then waits for human approval.',
     defaults: { scenario: 'approval', amountMinor: 250000, behavior: 'PASS' },
     notes: [
       'The workflow waits durably on a signal: no polling loop and no thread held open.',
       'Stop the application entirely and it is still waiting when the process returns.',
-      'The 30s deadline is a workflow timer, so the timeout is a branch in the workflow code.',
+      'The 60s deadline starts after the AI brief (or fallback) is ready and is a workflow timer.',
       'After approval it waits on the bank callback; the controls above offer whichever signal the workflow is blocked on.',
     ],
   },
@@ -239,6 +243,11 @@ function ScenarioPanel({ scenario, onStarted, current, status, statusError }) {
   const [edits, setEdits] = useState({})
   const amount = edits[scenario.id] ?? scenario.defaults.amountMinor
   const setAmount = value => setEdits(prev => ({ ...prev, [scenario.id]: value }))
+  const [factEdits, setFactEdits] = useState({})
+  const reviewFacts = factEdits[scenario.id] ??
+    (scenario.id === 'successful' ? DEFAULT_REVIEW_FACTS.successful : DEFAULT_REVIEW_FACTS.other)
+  const setReviewFacts = value => setFactEdits(prev => ({ ...prev, [scenario.id]: value }))
+  const [customerId, setCustomerId] = useState('cust-0001')
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
   const [pollOutcome, setPollOutcome] = useState('completed')
@@ -252,6 +261,9 @@ function ScenarioPanel({ scenario, onStarted, current, status, statusError }) {
           ...scenario.defaults,
           ...(scenario.pollOutcomes?.find(o => o.id === pollOutcome)?.cfg ?? {}),
           amountMinor: Number(amount),
+          aiBriefEnabled: true,
+          customerId,
+          reviewFacts: reviewFacts.split('\n').map(s => s.trim()).filter(Boolean),
         }),
       })
       onStarted(r)
@@ -287,6 +299,16 @@ function ScenarioPanel({ scenario, onStarted, current, status, statusError }) {
         <${Field} label="Amount (minor units, USD) — under 10000 settles inline, no callback">
           <input class="input" type="number" value=${amount} onInput=${e => setAmount(e.target.value)} />
         <//>
+        <${Field} label="Synthetic review facts — one per line, used only when approval is needed">
+          <textarea class="input" rows="3" value=${reviewFacts}
+                    onInput=${e => setReviewFacts(e.target.value)}></textarea>
+        <//>
+        <${Field} label="Synthetic customer record for AI investigation">
+          <select class="input" value=${customerId} onChange=${e => setCustomerId(e.target.value)}>
+            <option value="cust-0001">cust-0001 · no recorded fraud flags</option>
+            <option value="cust-0002">cust-0002 · unresolved account alert</option>
+          </select>
+        <//>
         ${scenario.pollOutcomes && html`
           <${Field} label="When the workflow polls, the bank eventually...">
             <select class="input" value=${pollOutcome} onChange=${e => setPollOutcome(e.target.value)}>
@@ -318,6 +340,29 @@ function ScenarioPanel({ scenario, onStarted, current, status, statusError }) {
               </span>`}
           </div>
           <div class="mono text-xs" style="color:var(--color-ink-muted)">${current.workflowId}</div>
+          ${status?.aiBrief && html`
+            <div class="panel p-3 space-y-2">
+              <div class="eyebrow">AI investigation brief · ${status.aiBrief.unavailable ? 'unavailable' : status.aiBrief.model}</div>
+              ${status.aiBrief.recommendation && html`
+                <div class="text-sm"><strong>Recommendation:</strong> ${status.aiBrief.recommendation === 'ESCALATE_REVIEW' ? 'Escalate for closer review' : 'Routine human review'}</div>`}
+              <div class="text-xs" style="color:var(--color-ink-muted)">Advisory only · synthetic evidence cannot establish fraud.</div>
+              <p class="text-sm" style="color:var(--color-ink-secondary)">${status.aiBrief.summary}</p>
+              ${status.aiBrief.investigationSkipReason && html`
+                <div class="text-xs" style="color:var(--color-ink-secondary)">
+                  <strong>Investigation skipped:</strong> ${status.aiBrief.investigationSkipReason}
+                </div>`}
+              ${status.aiBrief.investigation?.length > 0 && html`
+                <div class="text-xs space-y-2" style="color:var(--color-ink-secondary)">
+                  <strong>Agent tool calls · synthetic data</strong>
+                  ${status.aiBrief.investigation.map(step => html`
+                    <div class="panel p-2"><span class="mono">${step.tool}</span> · ${step.reason}<br/>${step.finding}</div>`)}
+                </div>`}
+              ${status.aiBrief.reviewItems?.length > 0 && html`
+                <ul class="text-sm space-y-2">
+                  ${status.aiBrief.reviewItems.map(item => html`
+                    <li><strong>${item.fact}</strong> · ${item.note}</li>`)}
+                </ul>`}
+            </div>`}
           ${note && html`<div class="text-xs" style="color:var(--color-state-warning)">${note}</div>`}
         </div>`}
 

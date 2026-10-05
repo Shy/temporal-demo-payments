@@ -39,7 +39,7 @@ case "$ACTUAL_CLI" in
       exit 1 ;;
 esac
 
-echo "1/4  Temporal dev server..."
+echo "1/5  Temporal dev server..."
 if ! "$TEMPORAL" operator cluster health >/dev/null 2>&1; then
   nohup bash scripts/start-temporal.sh >/tmp/payout-demo-temporal.log 2>&1 &
   for _ in $(seq 1 30); do temporal operator cluster health >/dev/null 2>&1 && break; sleep 1; done
@@ -47,11 +47,34 @@ fi
 "$TEMPORAL" operator cluster health >/dev/null 2>&1 || { echo "  Temporal failed to start"; exit 1; }
 echo "     SERVING on :7233, UI :8233, metrics :8000"
 
-echo "2/4  Caddy, Prometheus, Grafana..."
+echo "2/5  Local Qwen (Ollama)..."
+if command -v ollama >/dev/null 2>&1; then
+  if ! curl -sf http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
+    nohup ollama serve >/tmp/payout-demo-ollama.log 2>&1 </dev/null &
+    echo $! >/tmp/payout-demo-ollama.pid
+    for _ in $(seq 1 15); do
+      curl -sf http://127.0.0.1:11434/api/tags >/dev/null 2>&1 && break
+      sleep 1
+    done
+  fi
+  if curl -sf http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
+    if ollama show qwen3.5:9b >/dev/null 2>&1; then
+      echo "     Ollama ready with qwen3.5:9b"
+    else
+      echo "     qwen3.5:9b missing — run 'ollama pull qwen3.5:9b'; approvals will continue without a brief"
+    fi
+  else
+    echo "     Ollama unavailable; approvals will continue without a brief"
+  fi
+else
+  echo "     Ollama not installed; approvals will continue without a brief"
+fi
+
+echo "3/5  Caddy, Prometheus, Grafana..."
 docker compose up -d >/dev/null 2>&1
 echo "     up"
 
-echo "3/4  Backend (API) + worker process..."
+echo "4/5  Backend (API) + worker process..."
 # The API spawns worker JVMs from this jar, so it has to exist before boot.
 ( cd backend/kotlin && ./gradlew bootJar -q --console=plain ) || { echo "  jar build failed"; exit 1; }
 # Close stdin and redirect both streams, or the Gradle daemon keeps this script's pipe
@@ -67,7 +90,7 @@ for _ in $(seq 1 20); do
 done
 echo "     $n worker process(es) polling 'payouts'"
 
-echo "4/4  Ready."
+echo "5/5  Ready."
 echo
 echo "     Demo          http://localhost:8080"
 echo "     Temporal UI   http://localhost:8233   (also embedded in the right pane)"
