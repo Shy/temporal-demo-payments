@@ -22,3 +22,9 @@
 - The clean baseline now deterministically skips investigation and constrains the advisory brief to `NO_REVIEW_NEEDED` with no review items. Qwen still drafts the summary; the fixed $500 approval threshold continues to control whether the payout waits for a human. This exact-fact rule is deliberately narrow and does not establish whether a real payout is fraudulent.
 - Targeted activity and workflow tests passed. Fresh synthetic run `payout-successful-po-01a111b1fcd673bb` completed with an available Qwen brief, `NO_REVIEW_NEEDED`, no review items, and a Temporal history containing ChooseInvestigation, MarkInvestigationSkipped, and DraftAiBrief without either customer lookup.
 - The original successful run was saved as a 52-event replay fixture. The replay suite passed with it, confirming that a pre-fix low-value run with `aiBriefEnabled=true` does not gain new commands on replay.
+
+## 2026-10-06 — Transfer amount in the demo UI
+
+- Scenario controls previously exposed minor units, so the successful payout showed `7500` for $75.00. The UI now accepts USD dollars and cents, converts them to integer minor units for the existing API, and shows the formatted amount beside the input, on the start button, and in live status.
+- The input rejects zero, negative values, excess decimal places, and amounts outside JavaScript's safe integer range before starting a payout. The API and stored workflow amounts remain in minor units.
+- `node --check` passed. After restarting the local demo, the browser showed `$75.00` in the amount hint, start button, and live status; editing the input to `75.25` updated the hint and button to `$75.25`, then the default was restored.
