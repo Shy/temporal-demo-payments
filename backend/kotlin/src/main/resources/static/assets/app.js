@@ -299,7 +299,7 @@ function ScenarioPanel({ scenario, onStarted, current, status, statusError }) {
         <${Field} label="Amount (minor units, USD) — under 10000 settles inline, no callback">
           <input class="input" type="number" value=${amount} onInput=${e => setAmount(e.target.value)} />
         <//>
-        <${Field} label="Synthetic review facts — one per line, used only when approval is needed">
+        <${Field} label="Synthetic review facts for the AI brief — one per line">
           <textarea class="input" rows="3" value=${reviewFacts}
                     onInput=${e => setReviewFacts(e.target.value)}></textarea>
         <//>

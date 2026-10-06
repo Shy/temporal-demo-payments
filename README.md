@@ -19,6 +19,11 @@ make seed          # six workflows in six distinct states
 
 Then open **http://localhost:8080**.
 
+During startup, the Docker step shows Compose's image and container progress plus an elapsed-time
+update every five seconds while it is quiet. If Docker Desktop does not respond within 20 seconds,
+startup stops with an error instead of continuing without the proxy. Restart Docker Desktop and
+run `make stop && make start` after a partial startup.
+
 ```
 make stop            stop everything, waiting for the ports to be released
 make reset           stop and clear ALL state, including workflow history
@@ -81,7 +86,7 @@ resolved, and `make start` refuses to run on the wrong CLI or without a JDK 21.
 
 **Local AI investigation:** Install Ollama and run `ollama pull qwen3.5:9b` once. `make preflight`
 checks for the model, and `make start` starts Ollama if it is not already running. The model is
-never downloaded automatically. For manual payouts needing approval, the decision step chooses
+never downloaded automatically. For manually started demo payouts at any amount, the decision step chooses
 zero, one, or two read-only tools: customer profile and recent payouts. An empty review-facts
 list deterministically skips investigation; with facts supplied, Qwen chooses the tools. Each
 lookup is a separate Temporal Activity. Qwen then writes an evidence-grounded brief with a routine or
@@ -90,10 +95,11 @@ escalated human-review recommendation. The **Synthetic review facts** field star
 for this customer” for the other scenarios; add one fact per line. Both the facts
 and customer records are synthetic. Lookup results, model choice, and recommendation appear
 beside the approval controls and in the workflow Query. The agent cannot approve, reject, or
-move money. If a model call or lookup fails, approval proceeds with an “AI brief unavailable”
-message; each model call is bounded to 15 seconds, with no retries. The approval timer starts
-after investigation and runs for 60 seconds. Existing payouts and load-simulator payouts skip
-the AI steps and keep their original 30-second approval timer. The model name is configurable
+move money. If a model call or lookup fails, the payout continues with an “AI brief unavailable”
+message; each model call is bounded to 15 seconds, with no retries. Payouts under $500 still
+skip human approval. Where approval is required, its timer starts after investigation and runs
+for 60 seconds. Existing payouts and load-simulator payouts skip the AI steps and keep their
+original 30-second approval timer. The model name is configurable
 with `DEMO_AI_MODEL`; there is no model selector in the UI yet. The **Synthetic customer record**
 control switches between a customer with no recorded flags and one with an unresolved account
 alert, so the same review facts can be tried against different lookup evidence.
@@ -164,7 +170,7 @@ flowchart TD
     V["validatePayout"]:::act
     R["reserveFunds"]:::act
     F["validateFxQuote"]:::act
-    APP["conditional Qwen brief + AWAITING_APPROVAL, then APPROVED<br/>when the USD equivalent is $500 or more"]:::opt
+    APP["Qwen brief for manual demo payouts;<br/>AWAITING_APPROVAL only when the USD equivalent is $500 or more"]:::opt
     S["submitToRail"]:::act
     B["the bank confirms<br/>inline via settleWithBank under $100,<br/>otherwise the bankStatusUpdate callback"]:::wait
     M["markPayout COMPLETED"]:::act
@@ -188,8 +194,8 @@ flowchart TD
     classDef term fill:#f1f5f9,stroke:#334155,color:#111827
 ```
 
-Nine steps, no failures. The dashed box is the only conditional step: below $500 there is no
-approver. How the bank confirms is chosen by amount as well.
+Nine steps, no failures. The dashed box runs an AI brief for manually started demo payouts;
+below $500 there is no approver. How the bank confirms is chosen by amount as well.
 
 ### Every path, including the failures
 
@@ -224,9 +230,9 @@ flowchart TD
     START -->|"VALIDATING"| A_VALIDATE
     A_VALIDATE -->|"VALIDATED"| A_RESERVE
     A_RESERVE -->|"FUNDS_RESERVED"| A_FX
-    A_FX -->|"FX_QUOTE_VALIDATED"| TIER
+    A_FX -->|"FX_QUOTE_VALIDATED · manual runs draft AI brief"| TIER
     TIER -->|"no · SUBMITTING_TO_BANK"| A_SUBMIT
-    TIER -->|"L1 or SENIOR · manual runs draft AI brief first"| AWAIT_APP
+    TIER -->|"L1 or SENIOR"| AWAIT_APP
     AWAIT_APP -->|"APPROVED · SUBMITTING_TO_BANK"| A_SUBMIT
     A_SUBMIT -->|"SUBMITTED_TO_BANK"| AMT
     AMT -->|"yes · SETTLING_WITH_BANK"| A_SETTLE

@@ -13,6 +13,28 @@ export JAVA_HOME
 
 port_busy() { lsof -iTCP:"$1" -sTCP:LISTEN -n -P >/dev/null 2>&1; }
 
+# Docker can take time to start or pull images. Keep the terminal alive while a command is
+# quiet, and bound the daemon check so an unresponsive Docker Desktop is reported clearly.
+run_with_progress() {
+  local label="$1" deadline="$2" pid elapsed=0
+  shift 2
+  "$@" &
+  pid=$!
+  while kill -0 "$pid" 2>/dev/null; do
+    sleep 1
+    elapsed=$((elapsed + 1))
+    if (( elapsed % 5 == 0 )) && kill -0 "$pid" 2>/dev/null; then
+      echo "     $label (${elapsed}s elapsed)..."
+    fi
+    if (( deadline > 0 && elapsed >= deadline )) && kill -0 "$pid" 2>/dev/null; then
+      kill "$pid" 2>/dev/null || true
+      wait "$pid" 2>/dev/null || true
+      return 124
+    fi
+  done
+  wait "$pid"
+}
+
 # 8000 and 7233 are Temporal's. The metrics port stays in TIME_WAIT for a few seconds after
 # `make stop`, and the dev server then exits with "can't set metrics port 8000".
 for p in 8080 8081 9090 3000 8000 7233; do
@@ -71,7 +93,14 @@ else
 fi
 
 echo "3/5  Caddy, Prometheus, Grafana..."
-docker compose up -d >/dev/null 2>&1
+if ! run_with_progress "Waiting for Docker Desktop" 20 docker info --format '     Docker Engine {{.ServerVersion}} ready'; then
+  echo "     Docker Desktop is not responding. Check or restart it, then run 'make stop && make start'."
+  exit 1
+fi
+if ! run_with_progress "Starting Caddy, Prometheus, Grafana" 0 docker compose --progress plain up -d; then
+  echo "     Docker Compose failed. Check the error above, then run 'make start' again."
+  exit 1
+fi
 echo "     up"
 
 echo "4/5  Backend (API) + worker process..."

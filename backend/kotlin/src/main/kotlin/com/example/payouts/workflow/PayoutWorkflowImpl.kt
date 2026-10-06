@@ -58,7 +58,7 @@ class PayoutWorkflowImpl : PayoutWorkflow {
     private var payoutId = ""
     private var reversalReference = ""
     private var aiBrief: AiBrief? = null
-    private var aiEnhancedApproval = false
+    private var aiBriefAttempted = false
     // Deadline flags flipped by timer callbacks. Callbacks and signal handlers run in event
     // order, so whether the signal beat the deadline is decided by which of the two ran first.
     /** Set once, at the top of processPayout. See [FINDABLE_STATUSES]. */
@@ -154,7 +154,7 @@ class PayoutWorkflowImpl : PayoutWorkflow {
             setStartToCloseTimeout(Duration.ofSeconds(30))
             setScheduleToCloseTimeout(Duration.ofSeconds(30))
             setTaskQueue(TASK_QUEUE)
-            setSummary("Draft AI approval brief")
+            setSummary("Draft AI payout brief")
             setRetryOptions { setMaximumAttempts(1) }
         },
     )
@@ -288,14 +288,14 @@ class PayoutWorkflowImpl : PayoutWorkflow {
             advance(BusinessStatus.FX_QUOTE_VALIDATED, "FX quote valid, USD equivalent recorded")
 
             approvalTier = ApprovalThresholds.tierFor(usdEquivalentMinor)
-            if (approvalTier != ApprovalTier.NONE) {
-                // Old histories lack the new input field and this marker, so they retain the
-                // original 30s approval timer and schedule no new Activity on replay.
+            if (approvalTier != ApprovalTier.NONE || request.aiBriefEnabled) {
+                // Old histories lack this marker, so they schedule no new Activity on replay
+                // and retain the original 30s approval timer when approval is required.
                 if (request.aiBriefEnabled && Workflow.getVersion(
                         AI_BRIEF_CHANGE, Workflow.DEFAULT_VERSION, AI_BRIEF_VERSION,
                     ) >= AI_BRIEF_VERSION
                 ) {
-                    aiEnhancedApproval = true
+                    aiBriefAttempted = true
                     step = "Drafting AI approval brief"
                     val investigation = mutableListOf<AiInvestigationStep>()
                     var investigationSkipReason = ""
@@ -345,12 +345,12 @@ class PayoutWorkflowImpl : PayoutWorkflow {
                             ),
                         ).brief
                     } catch (e: ActivityFailure) {
-                        log.warn("AI brief unavailable; continuing to human approval", e)
+                        log.warn("AI brief unavailable; continuing payout workflow", e)
                         AiBrief(summary = "AI brief unavailable. Review the payout facts directly.", unavailable = true,
                             investigation = investigation, investigationSkipReason = investigationSkipReason)
                     }
                 }
-                if (!awaitApproval(request)) {
+                if (approvalTier != ApprovalTier.NONE && !awaitApproval(request)) {
                     // Cancelled: compensation runs in the catch below via the same saga.
                     throw ApprovalDeclined()
                 }
@@ -642,7 +642,7 @@ class PayoutWorkflowImpl : PayoutWorkflow {
         )
     }
 
-    private fun approvalTimeoutSeconds() = if (aiEnhancedApproval) 60L else 30L
+    private fun approvalTimeoutSeconds() = if (aiBriefAttempted) 60L else 30L
 
     private fun bankCallbackTimeoutSeconds() = 45L
 
