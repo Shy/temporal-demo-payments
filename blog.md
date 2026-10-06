@@ -15,4 +15,10 @@
 - Two manual $75 runs had `aiBriefEnabled=true` and review facts but no AI Activities because the workflow entered the AI branch only above the $500 human-approval threshold.
 - Manually started demo payouts now draft the AI brief after FX validation at any amount. Payouts below the threshold still skip human approval; load-simulator runs still skip AI. Existing histories without the version marker replay on their original path.
 - Unit tests passed for a successful low-value payout, a permanent rail rejection after investigation, and the existing replay suite. Live runs `payout-successful-po-01a111aa0d7874f9` and `payout-permanent-po-01a111aa0d7874fa` recorded ChooseInvestigation and DraftAiBrief before their respective completion and rail rejection, with available Qwen briefs.
+
+## 2026-10-06 — Typical low-value payout recommendation
+
+- The successful $75 live run completed without human approval, but Qwen chose both customer lookups and returned `ROUTINE_REVIEW` for its sole “typical customer behavior” fact. That recommendation contradicted the intended low-risk demo case.
+- The clean baseline now deterministically skips investigation and constrains the advisory brief to `NO_REVIEW_NEEDED` with no review items. Qwen still drafts the summary; the fixed $500 approval threshold continues to control whether the payout waits for a human. This exact-fact rule is deliberately narrow and does not establish whether a real payout is fraudulent.
+- Targeted activity and workflow tests passed. Fresh synthetic run `payout-successful-po-01a111b1fcd673bb` completed with an available Qwen brief, `NO_REVIEW_NEEDED`, no review items, and a Temporal history containing ChooseInvestigation, MarkInvestigationSkipped, and DraftAiBrief without either customer lookup.
 - The original successful run was saved as a 52-event replay fixture. The replay suite passed with it, confirming that a pre-fix low-value run with `aiBriefEnabled=true` does not gain new commands on replay.

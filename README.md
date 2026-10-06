@@ -88,9 +88,11 @@ resolved, and `make start` refuses to run on the wrong CLI or without a JDK 21.
 checks for the model, and `make start` starts Ollama if it is not already running. The model is
 never downloaded automatically. For manually started demo payouts at any amount, the decision step chooses
 zero, one, or two read-only tools: customer profile and recent payouts. An empty review-facts
-list deterministically skips investigation; with facts supplied, Qwen chooses the tools. Each
-lookup is a separate Temporal Activity. Qwen then writes an evidence-grounded brief with a routine or
-escalated human-review recommendation. The **Synthetic review facts** field starts with
+list deterministically skips investigation. The single fact “typical customer behavior” also
+skips investigation below the $500 manual-review threshold; other supplied facts let Qwen
+choose the tools. Each lookup is a separate Temporal Activity. Qwen then writes an
+evidence-grounded brief. The typical, low-value case recommends no additional review;
+other cases can recommend routine or escalated human review. The **Synthetic review facts** field starts with
 “typical customer behavior” for Successful payout, and “new recipient” plus “unusual amount
 for this customer” for the other scenarios; add one fact per line. Both the facts
 and customer records are synthetic. Lookup results, model choice, and recommendation appear
@@ -103,7 +105,7 @@ original 30-second approval timer. The model name is configurable
 with `DEMO_AI_MODEL`; there is no model selector in the UI yet. The **Synthetic customer record**
 control switches between a customer with no recorded flags and one with an unresolved account
 alert, so the same review facts can be tried against different lookup evidence.
-Clear the review facts to see the no-lookup path. The reason appears in the brief, and a
+Clear the review facts to see another no-lookup path. The reason appears in the brief, and a
 **MarkInvestigationSkipped** Activity makes that decision explicit on the Temporal timeline.
 
 ---

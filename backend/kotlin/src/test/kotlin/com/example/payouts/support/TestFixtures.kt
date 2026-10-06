@@ -11,6 +11,7 @@ import com.example.payouts.activities.CustomerInvestigationActivities
 import com.example.payouts.app.TemporalConfig
 import com.example.payouts.model.activity.*
 import com.example.payouts.model.domain.BankStatus
+import com.example.payouts.model.domain.ApprovalThresholds
 import com.example.payouts.model.domain.Money
 import com.example.payouts.model.domain.Rail
 import com.example.payouts.model.domain.Region
@@ -246,9 +247,16 @@ class RecordingActivities(
     override fun chooseInvestigation(request: ChooseInvestigationRequest) =
         run("chooseInvestigation", "ai") {
             if (aiInvestigationFails) throw ApplicationFailure.newFailure("model unavailable", "ModelUnavailable")
+            val typicalLowValue = request.usdEquivalentMinor < ApprovalThresholds.L1_FROM_MINOR &&
+                request.reviewFacts.size == 1 &&
+                request.reviewFacts.single().equals("typical customer behavior", ignoreCase = true)
             InvestigationChoice(
-                if (request.reviewFacts.isEmpty()) emptyList() else listOf("CUSTOMER_PROFILE", "RECENT_PAYOUTS"),
-                if (request.reviewFacts.isEmpty()) "No review facts supplied" else "Check customer context for supplied review facts",
+                if (request.reviewFacts.isEmpty() || typicalLowValue) emptyList() else listOf("CUSTOMER_PROFILE", "RECENT_PAYOUTS"),
+                when {
+                    request.reviewFacts.isEmpty() -> "No review facts supplied"
+                    typicalLowValue -> "Typical customer behavior and amount below the manual-review threshold"
+                    else -> "Check customer context for supplied review facts"
+                },
             )
         }
 
@@ -271,12 +279,15 @@ class RecordingActivities(
     override fun draftAiBrief(request: DraftAiBriefRequest) =
         run("draftAiBrief", "ai") {
             if (aiBriefFails) throw ApplicationFailure.newFailure("model unavailable", "ModelUnavailable")
+            val typicalLowValue = request.usdEquivalentMinor < ApprovalThresholds.L1_FROM_MINOR &&
+                request.reviewFacts.size == 1 &&
+                request.reviewFacts.single().equals("typical customer behavior", ignoreCase = true)
             DraftAiBriefResponse(
                 AiBrief(
                     summary = "Review this payout",
-                    reviewItems = request.reviewFacts.map { AiReviewItem(it, "Check this supplied fact") },
+                    reviewItems = if (typicalLowValue) emptyList() else request.reviewFacts.map { AiReviewItem(it, "Check this supplied fact") },
                     model = "test-qwen",
-                    recommendation = "ESCALATE_REVIEW",
+                    recommendation = if (typicalLowValue) "NO_REVIEW_NEEDED" else "ESCALATE_REVIEW",
                     investigation = request.investigation,
                     investigationSkipReason = request.investigationSkipReason,
                 ),

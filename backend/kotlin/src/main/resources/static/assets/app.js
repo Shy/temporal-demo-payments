@@ -344,7 +344,7 @@ function ScenarioPanel({ scenario, onStarted, current, status, statusError }) {
             <div class="panel p-3 space-y-2">
               <div class="eyebrow">AI investigation brief · ${status.aiBrief.unavailable ? 'unavailable' : status.aiBrief.model}</div>
               ${status.aiBrief.recommendation && html`
-                <div class="text-sm"><strong>Recommendation:</strong> ${status.aiBrief.recommendation === 'ESCALATE_REVIEW' ? 'Escalate for closer review' : 'Routine human review'}</div>`}
+                <div class="text-sm"><strong>Recommendation:</strong> ${status.aiBrief.recommendation === 'NO_REVIEW_NEEDED' ? 'No additional review needed' : status.aiBrief.recommendation === 'ESCALATE_REVIEW' ? 'Escalate for closer review' : 'Routine human review'}</div>`}
               <div class="text-xs" style="color:var(--color-ink-muted)">Advisory only · synthetic evidence cannot establish fraud.</div>
               <p class="text-sm" style="color:var(--color-ink-secondary)">${status.aiBrief.summary}</p>
               ${status.aiBrief.investigationSkipReason && html`
