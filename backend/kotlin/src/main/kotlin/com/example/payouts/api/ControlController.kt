@@ -11,6 +11,8 @@ class ControlController(
     private val scenarios: ScenarioStore,
     private val service: WorkflowServiceStubs,
     @Value("\${spring.temporal.namespace:default}") private val namespace: String,
+    @Value("\${demo.hosting:local}") private val hosting: String,
+    @Value("\${demo.temporal-ui-url:}") private val temporalUiUrl: String,
 ) {
 
     /** SDK language and version, task queue, namespace, and whether the server is reachable. */
@@ -26,6 +28,8 @@ class ControlController(
             "sdk" to "Temporal Java SDK 1.38.0",
             "taskQueue" to "payouts",
             "namespace" to namespace,
+            "hosting" to hosting,
+            "temporalUiUrl" to temporalUiUrl,
             "worker" to if (reachable) "UP" else "DOWN",
             "serverReachable" to reachable,
         )

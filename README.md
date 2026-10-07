@@ -98,7 +98,7 @@ for this customer” for the other scenarios; add one fact per line. Both the fa
 and customer records are synthetic. Lookup results, model choice, and recommendation appear
 beside the approval controls and in the workflow Query. The agent cannot approve, reject, or
 move money. If a model call or lookup fails, the payout continues with an “AI brief unavailable”
-message; each model call is bounded to 15 seconds, with no retries. Payouts under $500 still
+message; the investigation choice is bounded to 15 seconds and the brief to 30 seconds, with no retries. Payouts under $500 still
 skip human approval. Where approval is required, its timer starts after investigation and runs
 for 60 seconds. Existing payouts and load-simulator payouts skip the AI steps and keep their
 original 30-second approval timer. The model name is configurable
@@ -107,6 +107,16 @@ control switches between a customer with no recorded flags and one with an unres
 alert, so the same review facts can be tried against different lookup evidence.
 Clear the review facts to see another no-lookup path. The reason appears in the brief, and a
 **MarkInvestigationSkipped** Activity makes that decision explicit on the Temporal timeline.
+
+**Cloud adapter:** `docker/cloud.Dockerfile` packages the Spring API and its supervised
+worker in one container. Set `DEMO_HOSTING=cloud`, `DEMO_TEMPORAL_UI_URL` to the
+Temporal Cloud namespace page, `DEMO_AI_PROVIDER=openai`, `DEMO_AI_MODEL=gpt-4.1-mini`,
+and inject `OPENAI_API_KEY` from a secret. The registry's Temporal proxy lets the app
+continue using localhost:7233; its injected `TEMPORAL_NAMESPACE` selects the Cloud
+namespace. In cloud mode the demo links to Temporal Cloud and hides the local Grafana
+pane. Local mode keeps Ollama and Qwen by default. Scenario configuration is stored in
+the app container's ephemeral filesystem, so restarting the pod clears staged failure
+injection; existing Temporal workflow histories remain in Cloud.
 
 ---
 

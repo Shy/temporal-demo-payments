@@ -503,6 +503,10 @@ function App() {
   const [status, setStatus] = useState(null)
   const [statusError, setStatusError] = useState(false)
   const [health, setHealth] = useState(null)
+  const cloud = health?.hosting === 'cloud'
+  const cloudUi = health?.temporalUiUrl?.replace(/\/$/, '')
+  const cloudWorkflowUrl = current && cloudUi
+    ? `${cloudUi}/workflows/${encodeURIComponent(current.workflowId)}` : cloudUi
   const iframeRef = useRef(null)
   useTemporalTheme(iframeRef)
 
@@ -511,6 +515,8 @@ function App() {
                         .catch(() => { setHealth(null); setStatusError(true) })
     poll(); const t = setInterval(poll, 3000); return () => clearInterval(t)
   }, [])
+
+  useEffect(() => { if (cloud && tab === 'metrics') { setTab('demo'); location.hash = 'demo' } }, [cloud, tab])
 
   useEffect(() => {
     if (!current) return
@@ -539,7 +545,7 @@ function App() {
               style="border-bottom:1px solid var(--color-line-subtle)">
         <h1 class="text-lg" style="letter-spacing:-0.02em">Payout orchestration</h1>
         <nav class="flex gap-1">
-          ${[['demo', 'Demo'], ['metrics', 'Metrics']].map(([k, label]) => html`
+          ${[['demo', 'Demo'], ...(!cloud ? [['metrics', 'Metrics']] : [])].map(([k, label]) => html`
             <button class="btn ${tab === k ? 'btn-secondary' : 'btn-ghost'} uppercase"
                     style="font-size:.75rem;letter-spacing:.08em;padding:.45rem 1rem"
                     onClick=${() => { setTab(k); location.hash = k }}>${label}</button>`)}
@@ -566,20 +572,29 @@ function App() {
                         style="font-size:.75rem;padding:.35rem .7rem"
                         onClick=${() => setScenarioId(s.id)}>${i + 1}</button>`)}
             </div>
-            <div class="flex flex-wrap items-center gap-1"
+            ${!cloud && html`<div class="flex flex-wrap items-center gap-1"
                  style="border-bottom:1px solid var(--color-line-subtle);padding-bottom:.6rem">
               <span class="eyebrow" style="margin:0 .4rem 0 0">Temporal UI</span>
               ${VIEWS.map(v => html`
                 <button class="btn btn-ghost" title=${v.title}
                         style="font-size:.7rem;padding:.3rem .6rem"
                         onClick=${() => showInPane(v.path)}>${v.label}</button>`)}
-            </div>
+            </div>`}
             <${ScenarioPanel} scenario=${scenario} onStarted=${onStarted}
                               current=${current} status=${status} statusError=${statusError} />
           </aside>
           <section class="flex-1 min-w-0">
-            <iframe ref=${iframeRef} class="w-full h-full border-0"
-                    src="/namespaces/default/workflows"></iframe>
+            ${cloud ? html`
+              <div class="h-full flex flex-col items-center justify-center gap-4 p-8 text-center">
+                <div class="eyebrow">Temporal Cloud</div>
+                <p class="text-sm" style="color:var(--color-ink-secondary)">
+                  Follow the workflow history and activity timeline in Temporal Cloud.
+                </p>
+                ${cloudUi && html`<a class="btn btn-secondary" href=${cloudWorkflowUrl}
+                  target="_blank" rel="noopener noreferrer">
+                  ${current ? 'Open current workflow' : 'Open workflows'} ↗</a>`}
+              </div>` : html`<iframe ref=${iframeRef} class="w-full h-full border-0"
+                    src="/namespaces/default/workflows"></iframe>`}
           </section>
         </div>
         <div class="h-full ${tab === 'metrics' ? 'block' : 'hidden'}"><${MetricsTab} /></div>

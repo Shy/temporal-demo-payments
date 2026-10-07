@@ -28,3 +28,10 @@
 - Scenario controls previously exposed minor units, so the successful payout showed `7500` for $75.00. The UI now accepts USD dollars and cents, converts them to integer minor units for the existing API, and shows the formatted amount beside the input, on the start button, and in live status.
 - The input rejects zero, negative values, excess decimal places, and amounts outside JavaScript's safe integer range before starting a payout. The API and stored workflow amounts remain in minor units.
 - `node --check` passed. After restarting the local demo, the browser showed `$75.00` in the amount hint, start button, and live status; editing the input to `75.25` updated the hint and button to `$75.25`, then the default was restored.
+
+## 2026-10-07 — Cloud registry adapter (in progress)
+
+- Added a multi-stage JDK 21 Docker build for the Spring API and its supervised worker in one container. This preserves the shared file-backed scenario configuration required for failure injection, but that file is ephemeral across pod replacement.
+- Added an OpenAI Chat Completions path with strict JSON schemas for investigation choice and brief drafting. Local Ollama/Qwen remains the default. The choice and draft HTTP timeouts fit their respective 15-second and 30-second Temporal Activity limits. A local mock-server test passed; a live OpenAI request has not been verified.
+- Cloud mode replaces the same-origin Temporal Web iframe with a Temporal Cloud link and hides the local Grafana pane. The registry manifest declares all eleven custom search attributes, the platform Temporal proxy, and a project-scoped `OPENAI_API_KEY` reference.
+- The registry validator accepted the manifest. Deployment remains unverified because the `temporal-sa/temporal-demo-payments` source repository and the project-scoped secret must be provisioned; the current source is Mark's repository. The registry only supports project-scoped secret injection, so the shared OpenAI credential must be copied or bridged to `tmprl-dem-cld/payout-orchestration/openai-credentials` by an authorized operator.
